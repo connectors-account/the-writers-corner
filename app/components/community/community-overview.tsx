@@ -10,6 +10,8 @@ import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from '
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
+import { useToast } from '@/hooks/use-toast'
+import { useRouter } from 'next/navigation'
 
 interface CommunityPost {
   id: string
@@ -28,13 +30,19 @@ interface CommunityPost {
       slug: string
     }
   }
+  likesCount: number
+  commentsCount: number
+  isLikedByCurrentUser: boolean
 }
 
 export function CommunityOverview() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [posts, setPosts] = useState<CommunityPost[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [likingPostId, setLikingPostId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -72,6 +80,40 @@ export function CommunityOverview() {
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  const handleLike = async (postId: string, isLiked: boolean) => {
+    if (likingPostId) return
+
+    setLikingPostId(postId)
+    try {
+      const method = isLiked ? 'DELETE' : 'POST'
+      const response = await fetch(`/api/community/posts/${postId}/like`, {
+        method
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPosts(posts.map(post => 
+          post.id === postId 
+            ? { 
+                ...post, 
+                likesCount: data.likesCount, 
+                isLikedByCurrentUser: !isLiked 
+              }
+            : post
+        ))
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update like',
+        variant: 'destructive'
+      })
+    } finally {
+      setLikingPostId(null)
+    }
   }
 
   if (loading) {
@@ -249,14 +291,22 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleLike(post.id, post.isLikedByCurrentUser)}
+                          disabled={likingPostId === post.id}
+                          className={`${post.isLikedByCurrentUser ? 'text-rust' : 'text-forest'} hover:text-rust`}
+                        >
+                          <Heart className={`w-4 h-4 mr-1 ${post.isLikedByCurrentUser ? 'fill-current' : ''}`} />
+                          {post.likesCount}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
+                        <Link href={`/community/posts/${post.id}`}>
+                          <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                            <MessageCircle className="w-4 h-4 mr-1" />
+                            {post.commentsCount}
+                          </Button>
+                        </Link>
                       </div>
                       
                       {post.exercise && (

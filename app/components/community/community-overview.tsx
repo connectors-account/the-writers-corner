@@ -6,9 +6,10 @@ import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search, Send } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import Link from 'next/link'
 
 interface CommunityPost {
@@ -30,14 +31,36 @@ interface CommunityPost {
   }
 }
 
+interface Comment {
+  id: string
+  postId: string
+  content: string
+  userId: string
+  userName: string
+  createdAt: string
+}
+
+interface LikeData {
+  count: number
+  userLiked: boolean
+}
+
 export function CommunityOverview() {
   const [posts, setPosts] = useState<CommunityPost[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  
+  // Likes and comments state
+  const [likes, setLikes] = useState<Record<string, LikeData>>({})
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
+  const [showComments, setShowComments] = useState<Record<string, boolean>>({})
+  const [newComment, setNewComment] = useState<Record<string, string>>({})
+  const [submittingComment, setSubmittingComment] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetchCommunityPosts()
+    fetchLikesAndComments()
   }, [])
 
   const fetchCommunityPosts = async () => {
@@ -51,6 +74,95 @@ export function CommunityOverview() {
       console.error('Error fetching community posts:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchLikesAndComments = async () => {
+    try {
+      // Fetch all likes
+      const likesResponse = await fetch('/api/community/likes')
+      if (likesResponse.ok) {
+        const likesData = await likesResponse.json()
+        setLikes(likesData.likes || {})
+      }
+
+      // Fetch all comments
+      const commentsResponse = await fetch('/api/community/comments')
+      if (commentsResponse.ok) {
+        const commentsData = await commentsResponse.json()
+        setComments(commentsData.comments || {})
+      }
+    } catch (error) {
+      console.error('Error fetching likes and comments:', error)
+    }
+  }
+
+  const handleLike = async (postId: string) => {
+    try {
+      const response = await fetch('/api/community/likes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setLikes(prev => ({
+          ...prev,
+          [postId]: {
+            count: data.count,
+            userLiked: data.userLiked
+          }
+        }))
+      }
+    } catch (error) {
+      console.error('Error liking post:', error)
+    }
+  }
+
+  const toggleComments = (postId: string) => {
+    setShowComments(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }))
+  }
+
+  const handleCommentChange = (postId: string, value: string) => {
+    setNewComment(prev => ({
+      ...prev,
+      [postId]: value
+    }))
+  }
+
+  const handleSubmitComment = async (postId: string) => {
+    const content = newComment[postId]?.trim()
+    
+    if (!content) return
+
+    setSubmittingComment(prev => ({ ...prev, [postId]: true }))
+
+    try {
+      const response = await fetch('/api/community/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, content })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({
+          ...prev,
+          [postId]: data.comments
+        }))
+        setNewComment(prev => ({
+          ...prev,
+          [postId]: ''
+        }))
+      }
+    } catch (error) {
+      console.error('Error submitting comment:', error)
+    } finally {
+      setSubmittingComment(prev => ({ ...prev, [postId]: false }))
     }
   }
 
@@ -249,13 +361,37 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleLike(post.id)}
+                          className={`${
+                            likes[post.id]?.userLiked 
+                              ? 'text-rust' 
+                              : 'text-forest hover:text-rust'
+                          } transition-colors`}
+                        >
+                          <Heart 
+                            className={`w-4 h-4 mr-1 ${
+                              likes[post.id]?.userLiked ? 'fill-rust' : ''
+                            }`} 
+                          />
+                          <span>
+                            {likes[post.id]?.count || 0}
+                            {likes[post.id]?.count === 1 ? ' Like' : ' Likes'}
+                          </span>
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleComments(post.id)}
+                          className="text-forest hover:text-rust"
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          <span>
+                            {comments[post.id]?.length || 0}
+                            {comments[post.id]?.length === 1 ? ' Comment' : ' Comments'}
+                          </span>
                         </Button>
                       </div>
                       
@@ -267,6 +403,73 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    {showComments[post.id] && (
+                      <div className="mt-6 pt-6 border-t-2 border-sepia">
+                        {/* Existing Comments */}
+                        {comments[post.id] && comments[post.id].length > 0 && (
+                          <div className="space-y-4 mb-4">
+                            {comments[post.id].map((comment) => (
+                              <div 
+                                key={comment.id}
+                                className="bg-sepia/30 p-4 rounded-sm border border-sepia"
+                              >
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="font-typewriter text-ink font-semibold text-sm">
+                                    {comment.userName}
+                                  </span>
+                                  <span className="text-xs font-serif text-forest">
+                                    {formatDate(comment.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="font-serif text-forest text-sm leading-relaxed">
+                                  {comment.content}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add Comment */}
+                        <div className="space-y-2">
+                          <label className="font-typewriter text-ink text-sm font-semibold">
+                            Add a Comment:
+                          </label>
+                          <div className="flex gap-2">
+                            <Textarea
+                              placeholder="Share your thoughts..."
+                              value={newComment[post.id] || ''}
+                              onChange={(e) => handleCommentChange(post.id, e.target.value)}
+                              className="font-serif border-2 border-ink focus:border-rust resize-none min-h-[80px]"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && e.ctrlKey) {
+                                  handleSubmitComment(post.id)
+                                }
+                              }}
+                            />
+                            <Button
+                              onClick={() => handleSubmitComment(post.id)}
+                              disabled={!newComment[post.id]?.trim() || submittingComment[post.id]}
+                              className="btn-vintage self-end"
+                              size="sm"
+                            >
+                              {submittingComment[post.id] ? (
+                                'Posting...'
+                              ) : (
+                                <>
+                                  <Send className="w-4 h-4 mr-1" />
+                                  Post
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          <p className="text-xs font-serif text-forest italic">
+                            Press Ctrl+Enter to submit
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

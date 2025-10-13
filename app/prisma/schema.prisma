@@ -1,12 +1,11 @@
 generator client {
-    provider = "prisma-client-js"
-    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
-    output = "/home/ubuntu/writers_corner/app/node_modules/.prisma/client"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Account {
@@ -22,10 +21,84 @@ model Account {
   scope             String?
   id_token          String? @db.Text
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  User              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+}
+
+model Comment {
+  id                 String             @id @default(cuid())
+  content            String             @db.Text
+  submissionId       String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  authorName         String
+  ExerciseSubmission ExerciseSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+model CommunityPost {
+  id         String   @id @default(cuid())
+  title      String
+  content    String   @db.Text
+  userId     String
+  exerciseId String?
+  isPublic   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Exercise {
+  id                 String               @id @default(cuid())
+  title              String
+  prompt             String               @db.Text
+  instructions       String               @db.Text
+  topicId            String
+  order              Int                  @default(0)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  WritingTopic       WritingTopic         @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  ExerciseSubmission ExerciseSubmission[]
+}
+
+model ExerciseSubmission {
+  id         String    @id @default(cuid())
+  content    String    @db.Text
+  userId     String
+  exerciseId String
+  isPublic   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  Comment    Comment[]
+  Exercise   Exercise  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  User       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Like       Like[]
+
+  @@unique([userId, exerciseId])
+}
+
+model Like {
+  id                 String             @id @default(cuid())
+  submissionId       String
+  createdAt          DateTime           @default(now())
+  userIdentifier     String
+  ExerciseSubmission ExerciseSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, userIdentifier])
+  @@index([submissionId])
+}
+
+model Milestone {
+  id           String         @id @default(cuid())
+  title        String
+  description  String         @db.Text
+  week         Int
+  order        Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  UserProgress UserProgress[]
 }
 
 model Session {
@@ -33,25 +106,39 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  firstName     String?
-  lastName      String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  accounts      Account[]
-  sessions      Session[]
-  submissions   ExerciseSubmission[]
-  communityPosts CommunityPost[]
-  progress      UserProgress[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                 String               @id @default(cuid())
+  name               String?
+  firstName          String?
+  lastName           String?
+  email              String               @unique
+  emailVerified      DateTime?
+  image              String?
+  password           String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  Account            Account[]
+  CommunityPost      CommunityPost[]
+  ExerciseSubmission ExerciseSubmission[]
+  Session            Session[]
+  UserProgress       UserProgress[]
+}
+
+model UserProgress {
+  id          String    @id @default(cuid())
+  userId      String
+  milestoneId String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  Milestone   Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  User        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, milestoneId])
 }
 
 model VerificationToken {
@@ -63,77 +150,13 @@ model VerificationToken {
 }
 
 model WritingTopic {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   title       String
-  slug        String    @unique
-  description String    @db.Text
-  content     String    @db.Text
-  exercises   Exercise[]
-  order       Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
-
-model Exercise {
-  id          String    @id @default(cuid())
-  title       String
-  prompt      String    @db.Text
-  instructions String   @db.Text
-  topicId     String
-  topic       WritingTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  order       Int       @default(0)
-  submissions ExerciseSubmission[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
-
-model ExerciseSubmission {
-  id         String   @id @default(cuid())
-  content    String   @db.Text
-  userId     String
-  exerciseId String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  isPublic   Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@unique([userId, exerciseId])
-}
-
-model CommunityPost {
-  id        String   @id @default(cuid())
-  title     String
-  content   String   @db.Text
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  exerciseId String? // Optional link to specific exercise
-  isPublic  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Milestone {
-  id          String   @id @default(cuid())
-  title       String
-  description String   @db.Text
-  week        Int      // 1-12 for 3 months
-  order       Int      @default(0)
-  userProgress UserProgress[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model UserProgress {
-  id          String    @id @default(cuid())
-  userId      String
-  milestoneId String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  milestone   Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@unique([userId, milestoneId])
+  slug        String     @unique
+  description String     @db.Text
+  content     String     @db.Text
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  Exercise    Exercise[]
 }

@@ -40,6 +40,27 @@ export async function GET() {
               }
             }
           }
+        },
+        likes: {
+          select: {
+            id: true,
+            userName: true,
+            createdAt: true
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        },
+        comments: {
+          select: {
+            id: true,
+            userName: true,
+            content: true,
+            createdAt: true
+          },
+          orderBy: {
+            createdAt: 'asc'
+          }
         }
       },
       orderBy: {
@@ -55,7 +76,11 @@ export async function GET() {
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likes: submission.likes,
+      likesCount: submission.likes.length,
+      comments: submission.comments,
+      commentsCount: submission.comments.length
     }))
 
     return NextResponse.json({ posts })

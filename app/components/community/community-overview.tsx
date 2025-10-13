@@ -6,10 +6,26 @@ import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search, Send } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { toast } from 'react-hot-toast'
 import Link from 'next/link'
+
+interface Like {
+  id: string
+  userName: string
+  createdAt: string
+}
+
+interface Comment {
+  id: string
+  userName: string
+  content: string
+  createdAt: string
+}
 
 interface CommunityPost {
   id: string
@@ -28,6 +44,10 @@ interface CommunityPost {
       slug: string
     }
   }
+  likes: Like[]
+  likesCount: number
+  comments: Comment[]
+  commentsCount: number
 }
 
 export function CommunityOverview() {
@@ -35,8 +55,18 @@ export function CommunityOverview() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [currentUserName, setCurrentUserName] = useState('')
+  const [isNameDialogOpen, setIsNameDialogOpen] = useState(false)
+  const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null)
+  const [commentText, setCommentText] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
 
   useEffect(() => {
+    // Get or set user name from localStorage
+    const storedName = localStorage.getItem('communityUserName')
+    if (storedName) {
+      setCurrentUserName(storedName)
+    }
     fetchCommunityPosts()
   }, [])
 
@@ -52,6 +82,95 @@ export function CommunityOverview() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSetUserName = () => {
+    if (currentUserName.trim()) {
+      localStorage.setItem('communityUserName', currentUserName.trim())
+      setIsNameDialogOpen(false)
+      toast.success('Name saved! You can now like and comment on posts.')
+    } else {
+      toast.error('Please enter your name')
+    }
+  }
+
+  const handleLikeToggle = async (postId: string) => {
+    if (!currentUserName) {
+      setIsNameDialogOpen(true)
+      toast.error('Please enter your name first')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/submissions/likes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          submissionId: postId,
+          userName: currentUserName
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        // Refresh posts to get updated likes
+        await fetchCommunityPosts()
+        toast.success(data.action === 'liked' ? 'Post liked!' : 'Like removed')
+      } else {
+        toast.error('Failed to update like')
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+      toast.error('An error occurred')
+    }
+  }
+
+  const handleCommentSubmit = async (postId: string) => {
+    if (!currentUserName) {
+      setIsNameDialogOpen(true)
+      toast.error('Please enter your name first')
+      return
+    }
+
+    if (!commentText.trim()) {
+      toast.error('Please enter a comment')
+      return
+    }
+
+    setSubmittingComment(true)
+    try {
+      const response = await fetch('/api/submissions/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          submissionId: postId,
+          userName: currentUserName,
+          content: commentText
+        })
+      })
+
+      if (response.ok) {
+        // Refresh posts to get updated comments
+        await fetchCommunityPosts()
+        setCommentText('')
+        toast.success('Comment added!')
+      } else {
+        toast.error('Failed to add comment')
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error)
+      toast.error('An error occurred')
+    } finally {
+      setSubmittingComment(false)
+    }
+  }
+
+  const isLikedByCurrentUser = (post: CommunityPost) => {
+    return post.likes.some(like => like.userName === currentUserName)
   }
 
   const filteredPosts = posts.filter(post => {
@@ -74,6 +193,17 @@ export function CommunityOverview() {
     })
   }
 
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+
   if (loading) {
     return (
       <section className="py-12 px-4 paper-texture min-h-screen">
@@ -90,6 +220,30 @@ export function CommunityOverview() {
   return (
     <section className="py-12 px-4 paper-texture min-h-screen">
       <div className="max-w-content mx-auto">
+        {/* User Name Dialog */}
+        <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-typewriter">Enter Your Name</DialogTitle>
+              <DialogDescription className="font-serif">
+                Please enter your name to like and comment on posts. This will be displayed publicly.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Input
+                placeholder="Your name"
+                value={currentUserName}
+                onChange={(e) => setCurrentUserName(e.target.value)}
+                className="font-serif border-2 border-ink focus:border-rust"
+                onKeyPress={(e) => e.key === 'Enter' && handleSetUserName()}
+              />
+              <Button onClick={handleSetUserName} className="btn-vintage w-full">
+                Save Name
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -104,6 +258,27 @@ export function CommunityOverview() {
             Connect with fellow writers, share your exercise responses, and discover inspiration 
             from the creative work of others in our supportive community.
           </p>
+
+          {/* User Info */}
+          {currentUserName ? (
+            <div className="mb-4">
+              <Badge className="bg-gold/20 text-ink font-typewriter text-sm">
+                Posting as: {currentUserName}
+              </Badge>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setIsNameDialogOpen(true)}
+                className="ml-2 text-xs"
+              >
+                Change Name
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={() => setIsNameDialogOpen(true)} className="btn-vintage mb-4">
+              Set Your Name to Interact
+            </Button>
+          )}
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-6 max-w-md mx-auto">
@@ -247,16 +422,110 @@ export function CommunityOverview() {
                       {getExcerpt(post.content)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
+                    {/* Like and Comment Actions */}
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`text-forest hover:text-rust ${isLikedByCurrentUser(post) ? 'text-rust' : ''}`}
+                          onClick={() => handleLikeToggle(post.id)}
+                        >
+                          <Heart 
+                            className={`w-4 h-4 mr-1 ${isLikedByCurrentUser(post) ? 'fill-current' : ''}`}
+                          />
+                          {post.likesCount} {post.likesCount === 1 ? 'Like' : 'Likes'}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                              <MessageCircle className="w-4 h-4 mr-1" />
+                              {post.commentsCount} {post.commentsCount === 1 ? 'Comment' : 'Comments'}
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle className="font-typewriter">{post.title}</DialogTitle>
+                            </DialogHeader>
+                            
+                            {/* Post Content */}
+                            <div className="border-b pb-4 mb-4">
+                              <p className="font-serif text-forest leading-relaxed">
+                                {post.content}
+                              </p>
+                            </div>
+
+                            {/* Likes Section */}
+                            {post.likes.length > 0 && (
+                              <div className="mb-4">
+                                <h4 className="font-typewriter text-ink mb-2">
+                                  Liked by {post.likesCount} {post.likesCount === 1 ? 'person' : 'people'}:
+                                </h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {post.likes.map((like) => (
+                                    <Badge key={like.id} className="bg-rust/20 text-rust font-typewriter text-xs">
+                                      {like.userName}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Comments Section */}
+                            <div className="space-y-4">
+                              <h4 className="font-typewriter text-ink">
+                                Comments ({post.commentsCount}):
+                              </h4>
+                              
+                              {post.comments.length > 0 ? (
+                                <div className="space-y-3 mb-4">
+                                  {post.comments.map((comment) => (
+                                    <div key={comment.id} className="bg-sepia/30 p-3 rounded border border-ink/10">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-typewriter text-ink font-semibold text-sm">
+                                          {comment.userName}
+                                        </span>
+                                        <span className="text-xs font-serif text-forest">
+                                          {formatDateTime(comment.createdAt)}
+                                        </span>
+                                      </div>
+                                      <p className="font-serif text-forest text-sm">
+                                        {comment.content}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="font-serif text-forest text-sm italic mb-4">
+                                  No comments yet. Be the first to comment!
+                                </p>
+                              )}
+
+                              {/* Add Comment Form */}
+                              <div className="border-t pt-4">
+                                <Textarea
+                                  placeholder="Add a comment..."
+                                  value={commentText}
+                                  onChange={(e) => setCommentText(e.target.value)}
+                                  className="font-serif border-2 border-ink focus:border-rust mb-2"
+                                  rows={3}
+                                />
+                                <Button 
+                                  onClick={() => handleCommentSubmit(post.id)}
+                                  disabled={submittingComment || !commentText.trim()}
+                                  className="btn-vintage w-full"
+                                >
+                                  {submittingComment ? 'Posting...' : (
+                                    <>
+                                      <Send className="w-4 h-4 mr-2" />
+                                      Post Comment
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                       
                       {post.exercise && (

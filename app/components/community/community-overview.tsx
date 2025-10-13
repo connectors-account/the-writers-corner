@@ -2,12 +2,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search, Send } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
 
@@ -30,11 +31,26 @@ interface CommunityPost {
   }
 }
 
+interface Comment {
+  id: string
+  postId: string
+  author: string
+  content: string
+  createdAt: string
+}
+
 export function CommunityOverview() {
   const [posts, setPosts] = useState<CommunityPost[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  
+  // In-memory storage for likes and comments
+  const [likes, setLikes] = useState<Record<string, number>>({})
+  const [userLikes, setUserLikes] = useState<Set<string>>(new Set())
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
+  const [showComments, setShowComments] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -53,6 +69,73 @@ export function CommunityOverview() {
       setLoading(false)
     }
   }
+
+  // Like functionality
+  const handleLike = (postId: string) => {
+    setUserLikes((prev) => {
+      const newLikes = new Set(prev)
+      const isLiked = newLikes.has(postId)
+      
+      if (isLiked) {
+        newLikes.delete(postId)
+        setLikes((prevLikes) => ({
+          ...prevLikes,
+          [postId]: Math.max(0, (prevLikes[postId] || 0) - 1)
+        }))
+      } else {
+        newLikes.add(postId)
+        setLikes((prevLikes) => ({
+          ...prevLikes,
+          [postId]: (prevLikes[postId] || 0) + 1
+        }))
+      }
+      
+      return newLikes
+    })
+  }
+
+  const isLiked = (postId: string) => userLikes.has(postId)
+  const getLikeCount = (postId: string) => likes[postId] || 0
+
+  // Comment functionality
+  const handleCommentInputChange = (postId: string, value: string) => {
+    setCommentInputs((prev) => ({
+      ...prev,
+      [postId]: value
+    }))
+  }
+
+  const handleAddComment = (postId: string) => {
+    const commentText = commentInputs[postId]?.trim()
+    if (!commentText) return
+
+    const newComment: Comment = {
+      id: `${postId}-${Date.now()}`,
+      postId,
+      author: 'Anonymous Writer',
+      content: commentText,
+      createdAt: new Date().toISOString()
+    }
+
+    setComments((prev) => ({
+      ...prev,
+      [postId]: [...(prev[postId] || []), newComment]
+    }))
+
+    setCommentInputs((prev) => ({
+      ...prev,
+      [postId]: ''
+    }))
+  }
+
+  const toggleComments = (postId: string) => {
+    setShowComments((prev) => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }))
+  }
+
+  const getCommentCount = (postId: string) => comments[postId]?.length || 0
 
   const filteredPosts = posts.filter(post => {
     const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -247,15 +330,36 @@ export function CommunityOverview() {
                       {getExcerpt(post.content)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleLike(post.id)}
+                          className={`transition-colors ${
+                            isLiked(post.id) 
+                              ? 'text-rust hover:text-rust/80' 
+                              : 'text-forest hover:text-rust'
+                          }`}
+                        >
+                          <Heart 
+                            className={`w-4 h-4 mr-1 transition-all ${
+                              isLiked(post.id) ? 'fill-rust' : ''
+                            }`} 
+                          />
+                          {getLikeCount(post.id) > 0 ? `${getLikeCount(post.id)}` : 'Like'}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleComments(post.id)}
+                          className="text-forest hover:text-rust"
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {getCommentCount(post.id) > 0 
+                            ? `${getCommentCount(post.id)} ${getCommentCount(post.id) === 1 ? 'Comment' : 'Comments'}`
+                            : 'Comment'
+                          }
                         </Button>
                       </div>
                       
@@ -267,6 +371,71 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    <AnimatePresence>
+                      {showComments[post.id] && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="border-t-2 border-sepia pt-4 mt-4"
+                        >
+                          {/* Comment Input */}
+                          <div className="mb-4">
+                            <Textarea
+                              placeholder="Share your thoughts..."
+                              value={commentInputs[post.id] || ''}
+                              onChange={(e) => handleCommentInputChange(post.id, e.target.value)}
+                              className="font-serif border-2 border-ink focus:border-rust resize-none mb-2"
+                              rows={3}
+                            />
+                            <div className="flex justify-end">
+                              <Button
+                                onClick={() => handleAddComment(post.id)}
+                                disabled={!commentInputs[post.id]?.trim()}
+                                className="btn-vintage"
+                                size="sm"
+                              >
+                                <Send className="w-4 h-4 mr-1" />
+                                Post Comment
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Comments Display */}
+                          {comments[post.id] && comments[post.id].length > 0 && (
+                            <div className="space-y-3">
+                              <h4 className="font-typewriter font-semibold text-ink text-sm mb-2">
+                                Comments ({getCommentCount(post.id)})
+                              </h4>
+                              {comments[post.id].map((comment) => (
+                                <motion.div
+                                  key={comment.id}
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="bg-sepia/30 rounded-sm p-3 border border-ink/20"
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-typewriter text-sm font-semibold text-ink">
+                                      {comment.author}
+                                    </span>
+                                    <span className="text-xs font-serif text-forest">
+                                      {formatDate(comment.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="font-serif text-forest text-sm leading-relaxed">
+                                    {comment.content}
+                                  </p>
+                                </motion.div>
+                              ))}
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </CardContent>
                 </Card>
               </motion.div>

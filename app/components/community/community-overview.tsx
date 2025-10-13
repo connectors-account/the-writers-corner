@@ -2,14 +2,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search, Send, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import Link from 'next/link'
+import { toast } from 'react-hot-toast'
 
 interface CommunityPost {
   id: string
@@ -28,6 +31,15 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount?: number
+  commentCount?: number
+}
+
+interface Comment {
+  id: string
+  authorName: string
+  content: string
+  createdAt: string
 }
 
 export function CommunityOverview() {
@@ -35,6 +47,17 @@ export function CommunityOverview() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  
+  // Like states
+  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set())
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+  
+  // Comment states
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
+  const [newComment, setNewComment] = useState({ authorName: '', content: '' })
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [loadingComments, setLoadingComments] = useState(false)
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -45,13 +68,137 @@ export function CommunityOverview() {
       const response = await fetch('/api/community/posts')
       if (response.ok) {
         const data = await response.json()
-        setPosts(data.posts || [])
+        const postsData = data.posts || []
+        setPosts(postsData)
+        
+        // Initialize like counts
+        const counts: Record<string, number> = {}
+        postsData.forEach((post: CommunityPost) => {
+          counts[post.id] = post.likeCount || 0
+        })
+        setLikeCounts(counts)
+        
+        // Fetch like status for each post
+        postsData.forEach((post: CommunityPost) => {
+          fetchLikeStatus(post.id)
+        })
       }
     } catch (error) {
       console.error('Error fetching community posts:', error)
+      toast.error('Failed to load posts')
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchLikeStatus = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/likes`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.isLiked) {
+          setLikedPosts(prev => new Set([...prev, postId]))
+        }
+        setLikeCounts(prev => ({ ...prev, [postId]: data.count }))
+      }
+    } catch (error) {
+      console.error('Error fetching like status:', error)
+    }
+  }
+
+  const handleLikeToggle = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/likes`, {
+        method: 'POST'
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setLikedPosts(prev => {
+          const newSet = new Set(prev)
+          if (data.isLiked) {
+            newSet.add(postId)
+          } else {
+            newSet.delete(postId)
+          }
+          return newSet
+        })
+        setLikeCounts(prev => ({ ...prev, [postId]: data.count }))
+        toast.success(data.message)
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+      toast.error('Failed to update like')
+    }
+  }
+
+  const fetchComments = async (postId: string) => {
+    setLoadingComments(true)
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`)
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({ ...prev, [postId]: data.comments }))
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+      toast.error('Failed to load comments')
+    } finally {
+      setLoadingComments(false)
+    }
+  }
+
+  const handleCommentSubmit = async (postId: string) => {
+    if (!newComment.authorName.trim() || !newComment.content.trim()) {
+      toast.error('Please enter your name and comment')
+      return
+    }
+
+    setSubmittingComment(true)
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newComment)
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({
+          ...prev,
+          [postId]: [...(prev[postId] || []), data.comment]
+        }))
+        setNewComment({ authorName: '', content: '' })
+        toast.success('Comment added successfully')
+        
+        // Update comment count in posts
+        setPosts(prev => prev.map(post => 
+          post.id === postId 
+            ? { ...post, commentCount: (post.commentCount || 0) + 1 }
+            : post
+        ))
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to add comment')
+      }
+    } catch (error) {
+      console.error('Error submitting comment:', error)
+      toast.error('Failed to add comment')
+    } finally {
+      setSubmittingComment(false)
+    }
+  }
+
+  const openCommentsDialog = (postId: string) => {
+    setSelectedPostId(postId)
+    if (!comments[postId]) {
+      fetchComments(postId)
+    }
+  }
+
+  const closeCommentsDialog = () => {
+    setSelectedPostId(null)
+    setNewComment({ authorName: '', content: '' })
   }
 
   const filteredPosts = posts.filter(post => {
@@ -72,6 +219,21 @@ export function CommunityOverview() {
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  const formatCommentDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
+
+    if (minutes < 1) return 'just now'
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}h ago`
+    if (days < 7) return `${days}d ago`
+    return formatDate(dateString)
   }
 
   if (loading) {
@@ -249,13 +411,23 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`${likedPosts.has(post.id) ? 'text-rust' : 'text-forest'} hover:text-rust transition-colors`}
+                          onClick={() => handleLikeToggle(post.id)}
+                        >
+                          <Heart className={`w-4 h-4 mr-1 ${likedPosts.has(post.id) ? 'fill-rust' : ''}`} />
+                          {likeCounts[post.id] || 0}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-forest hover:text-rust"
+                          onClick={() => openCommentsDialog(post.id)}
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {post.commentCount || 0}
                         </Button>
                       </div>
                       
@@ -295,6 +467,103 @@ export function CommunityOverview() {
           </Link>
         </motion.div>
       </div>
+
+      {/* Comments Dialog */}
+      <Dialog open={selectedPostId !== null} onOpenChange={(open) => !open && closeCommentsDialog()}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-typewriter text-ink text-xl">Comments</DialogTitle>
+            <DialogDescription className="font-serif text-forest">
+              Join the conversation
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPostId && (
+            <div className="space-y-6">
+              {/* Comments List */}
+              <div className="space-y-4">
+                {loadingComments ? (
+                  <div className="text-center py-8">
+                    <div className="animate-pulse">
+                      <div className="h-4 bg-sepia rounded w-3/4 mx-auto mb-2"></div>
+                      <div className="h-4 bg-sepia rounded w-1/2 mx-auto"></div>
+                    </div>
+                  </div>
+                ) : comments[selectedPostId]?.length > 0 ? (
+                  comments[selectedPostId].map((comment) => (
+                    <div key={comment.id} className="border-l-2 border-rust pl-4 py-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-typewriter font-semibold text-ink">
+                          {comment.authorName}
+                        </span>
+                        <span className="text-xs font-serif text-forest">
+                          {formatCommentDate(comment.createdAt)}
+                        </span>
+                      </div>
+                      <p className="font-serif text-forest text-sm">
+                        {comment.content}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <MessageCircle className="w-12 h-12 text-forest mx-auto mb-2 opacity-50" />
+                    <p className="font-serif text-forest">No comments yet. Be the first to comment!</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Add Comment Form */}
+              <div className="border-t-2 border-sepia pt-4">
+                <h4 className="font-typewriter font-semibold text-ink mb-3">Add a Comment</h4>
+                <div className="space-y-3">
+                  <div>
+                    <Input
+                      placeholder="Your name"
+                      value={newComment.authorName}
+                      onChange={(e) => setNewComment(prev => ({ ...prev, authorName: e.target.value }))}
+                      className="font-serif border-2 border-ink focus:border-rust"
+                      maxLength={100}
+                    />
+                  </div>
+                  <div>
+                    <Textarea
+                      placeholder="Write your comment..."
+                      value={newComment.content}
+                      onChange={(e) => setNewComment(prev => ({ ...prev, content: e.target.value }))}
+                      className="font-serif border-2 border-ink focus:border-rust min-h-[100px]"
+                      maxLength={5000}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={closeCommentsDialog}
+                      className="font-typewriter"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => handleCommentSubmit(selectedPostId)}
+                      disabled={submittingComment}
+                      className="btn-vintage"
+                    >
+                      {submittingComment ? (
+                        <>Posting...</>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4 mr-2" />
+                          Post Comment
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

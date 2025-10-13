@@ -9,14 +9,15 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
+    // Remove authentication requirement to allow anyone to view posts
+    // const session = await getServerSession(authOptions)
 
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    // if (!session?.user?.id) {
+    //   return NextResponse.json(
+    //     { error: 'Unauthorized' },
+    //     { status: 401 }
+    //   )
+    // }
 
     // Fetch public exercise submissions
     const submissions = await prisma.exerciseSubmission.findMany({
@@ -40,6 +41,12 @@ export async function GET() {
               }
             }
           }
+        },
+        _count: {
+          select: {
+            Like: true,
+            Comment: true
+          }
         }
       },
       orderBy: {
@@ -49,13 +56,15 @@ export async function GET() {
     })
 
     // Convert submissions to community post format
-    const posts = submissions.map(submission => ({
+    const posts = submissions.map((submission: any) => ({
       id: submission.id,
       title: submission.exercise.title,
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission._count.Like,
+      commentCount: submission._count.Comment
     }))
 
     return NextResponse.json({ posts })

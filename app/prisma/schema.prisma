@@ -35,21 +35,23 @@ model Session {
 }
 
 model User {
-  id             String               @id @default(cuid())
-  name           String?
-  firstName      String?
-  lastName       String?
-  email          String               @unique
-  emailVerified  DateTime?
-  image          String?
-  password       String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  accounts       Account[]
-  communityPosts CommunityPost[]
-  submissions    ExerciseSubmission[]
-  sessions       Session[]
-  progress       UserProgress[]
+  id                 String               @id @default(cuid())
+  name               String?
+  firstName          String?
+  lastName           String?
+  email              String               @unique
+  emailVerified      DateTime?
+  image              String?
+  password           String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  accounts           Account[]
+  communityPosts     CommunityPost[]
+  submissions        ExerciseSubmission[]
+  sessions           Session[]
+  progress           UserProgress[]
+  submissionLikes    SubmissionLike[]
+  submissionComments SubmissionComment[]
 }
 
 model VerificationToken {
@@ -86,31 +88,33 @@ model Exercise {
 }
 
 model ExerciseSubmission {
-  id         String    @id @default(cuid())
-  content    String
-  userId     String
-  exerciseId String
-  isPublic   Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  Comment    Comment[]
-  exercise   Exercise  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  Like       Like[]
+  id                String              @id @default(cuid())
+  content           String
+  userId            String
+  exerciseId        String
+  isPublic          Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  exercise          Exercise            @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  SubmissionComment SubmissionComment[]
+  SubmissionLike    SubmissionLike[]
 
   @@unique([userId, exerciseId])
 }
 
 model CommunityPost {
-  id         String   @id @default(cuid())
-  title      String
-  content    String
-  userId     String
-  exerciseId String?
-  isPublic   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String        @id @default(cuid())
+  title       String
+  content     String
+  userId      String
+  exerciseId  String?
+  isPublic    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  PostComment PostComment[]
+  PostLike    PostLike[]
 }
 
 model Milestone {
@@ -138,25 +142,49 @@ model UserProgress {
   @@unique([userId, milestoneId])
 }
 
-model Comment {
+model PostComment {
+  id            String        @id @default(cuid())
+  postId        String
+  userName      String
+  content       String
+  createdAt     DateTime      @default(now())
+  CommunityPost CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model PostLike {
+  id            String        @id @default(cuid())
+  postId        String
+  userName      String
+  createdAt     DateTime      @default(now())
+  CommunityPost CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userName])
+  @@index([postId])
+}
+
+model SubmissionComment {
   id                 String             @id @default(cuid())
-  content            String
   submissionId       String
+  userId             String
+  content            String
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
-  authorName         String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   ExerciseSubmission ExerciseSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@index([submissionId])
 }
 
-model Like {
+model SubmissionLike {
   id                 String             @id @default(cuid())
   submissionId       String
-  userIdentifier     String             // IP address or session identifier for anonymous likes
+  userId             String
   createdAt          DateTime           @default(now())
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   ExerciseSubmission ExerciseSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  @@unique([submissionId, userIdentifier])
+  @@unique([submissionId, userId])
   @@index([submissionId])
 }

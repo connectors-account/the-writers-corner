@@ -9,15 +9,8 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    // Remove authentication requirement to allow anyone to view posts
-    // const session = await getServerSession(authOptions)
-
-    // if (!session?.user?.id) {
-    //   return NextResponse.json(
-    //     { error: 'Unauthorized' },
-    //     { status: 401 }
-    //   )
-    // }
+    // Get session to check if user liked posts, but don't require it
+    const session = await getServerSession(authOptions)
 
     // Fetch public exercise submissions
     const submissions = await prisma.exerciseSubmission.findMany({
@@ -42,10 +35,15 @@ export async function GET() {
             }
           }
         },
-        _count: {
+        SubmissionLike: {
           select: {
-            Like: true,
-            Comment: true
+            id: true,
+            userId: true
+          }
+        },
+        SubmissionComment: {
+          select: {
+            id: true
           }
         }
       },
@@ -63,8 +61,11 @@ export async function GET() {
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
       exercise: submission.exercise,
-      likeCount: submission._count.Like,
-      commentCount: submission._count.Comment
+      likesCount: submission.SubmissionLike.length,
+      commentsCount: submission.SubmissionComment.length,
+      isLikedByUser: session?.user?.id 
+        ? submission.SubmissionLike.some((like: any) => like.userId === session.user.id)
+        : false
     }))
 
     return NextResponse.json({ posts })

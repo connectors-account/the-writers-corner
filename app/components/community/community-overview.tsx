@@ -10,12 +10,16 @@ import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from '
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
+import { PostLikes } from './post-likes'
+import { PostComments } from './post-comments'
 
 interface CommunityPost {
   id: string
   title: string
   content: string
   createdAt: string
+  likeCount: number
+  commentCount: number
   user: {
     firstName?: string
     lastName?: string
@@ -249,14 +253,8 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
+                        <PostLikes postId={post.id} initialCount={post.likeCount} />
+                        <PostComments postId={post.id} initialCount={post.commentCount} />
                       </div>
                       
                       {post.exercise && (

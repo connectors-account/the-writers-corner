@@ -137,3 +137,29 @@ model UserProgress {
 
   @@unique([userId, milestoneId])
 }
+
+model PostLike {
+  id        String   @id @default(cuid())
+  postId    String   // Reference to ExerciseSubmission id (community post)
+  userId    String?  // Optional for anonymous likes
+  sessionId String?  // For tracking anonymous users
+  ipAddress String?  // Additional tracking for anonymous likes
+  createdAt DateTime @default(now())
+
+  @@unique([postId, sessionId])
+  @@index([postId])
+}
+
+model PostComment {
+  id          String   @id @default(cuid())
+  postId      String   // Reference to ExerciseSubmission id (community post)
+  content     String   @db.Text
+  authorName  String   // Display name for anonymous comments
+  userId      String?  // Optional for anonymous comments
+  sessionId   String?  // For tracking anonymous users
+  ipAddress   String?  // Additional tracking for anonymous comments
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([postId])
+}

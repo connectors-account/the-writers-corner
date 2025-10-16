@@ -48,14 +48,51 @@ export async function GET() {
       take: 50
     })
 
-    // Convert submissions to community post format
+    // Get like and comment counts for all posts
+    const postIds = submissions.map(s => s.id)
+    
+    const likeCounts = await prisma.postLike.groupBy({
+      by: ['postId'],
+      where: {
+        postId: {
+          in: postIds
+        }
+      },
+      _count: {
+        id: true
+      }
+    })
+
+    const commentCounts = await prisma.postComment.groupBy({
+      by: ['postId'],
+      where: {
+        postId: {
+          in: postIds
+        }
+      },
+      _count: {
+        id: true
+      }
+    })
+
+    // Create lookup maps
+    const likeCountMap = new Map(
+      likeCounts.map(item => [item.postId, item._count.id])
+    )
+    const commentCountMap = new Map(
+      commentCounts.map(item => [item.postId, item._count.id])
+    )
+
+    // Convert submissions to community post format with counts
     const posts = submissions.map(submission => ({
       id: submission.id,
       title: submission.exercise.title,
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: likeCountMap.get(submission.id) || 0,
+      commentCount: commentCountMap.get(submission.id) || 0
     }))
 
     return NextResponse.json({ posts })

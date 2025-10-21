@@ -1,7 +1,6 @@
 generator client {
     provider = "prisma-client-js"
     binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
-    output = "/home/ubuntu/writers_corner/app/node_modules/.prisma/client"
 }
 
 datasource db {
@@ -49,6 +48,8 @@ model User {
   sessions      Session[]
   submissions   ExerciseSubmission[]
   communityPosts CommunityPost[]
+  postLikes     PostLike[]
+  postComments  PostComment[]
   progress      UserProgress[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -111,6 +112,35 @@ model CommunityPost {
   isPublic  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PostLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // For anonymous likes, we store a unique identifier (could be IP hash or session ID)
+  anonymousId String?
+  createdAt DateTime @default(now())
+  
+  @@unique([postId, userId])
+  @@unique([postId, anonymousId])
+  @@index([postId])
+}
+
+model PostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // For anonymous comments
+  anonymousId   String?
+  authorName    String  @default("Anonymous")
+  content       String  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([postId])
 }
 
 model Milestone {

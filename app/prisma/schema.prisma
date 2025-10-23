@@ -109,8 +109,36 @@ model CommunityPost {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   exerciseId String? // Optional link to specific exercise
   isPublic  Boolean  @default(true)
+  likes     PostLike[]
+  comments  PostComment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PostLike {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  submissionId String? // For exercise submissions
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@index([submissionId])
+}
+
+model PostComment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  userId    String
+  postId    String
+  submissionId String? // For exercise submissions
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
+  @@index([submissionId])
+  @@index([userId])
 }
 
 model Milestone {

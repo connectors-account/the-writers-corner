@@ -48,17 +48,41 @@ export async function GET() {
       take: 50
     })
 
-    // Convert submissions to community post format
-    const posts = submissions.map(submission => ({
-      id: submission.id,
-      title: submission.exercise.title,
-      content: submission.content,
-      createdAt: submission.createdAt.toISOString(),
-      user: submission.user,
-      exercise: submission.exercise
-    }))
+    // Fetch like counts and comment counts for all posts
+    const postsWithInteractions = await Promise.all(
+      submissions.map(async (submission) => {
+        const [likeCount, commentCount, userLike] = await Promise.all([
+          prisma.postLike.count({
+            where: { postId: submission.id }
+          }),
+          prisma.postComment.count({
+            where: { postId: submission.id }
+          }),
+          prisma.postLike.findUnique({
+            where: {
+              userId_postId: {
+                userId: session.user.id,
+                postId: submission.id
+              }
+            }
+          })
+        ])
 
-    return NextResponse.json({ posts })
+        return {
+          id: submission.id,
+          title: submission.exercise.title,
+          content: submission.content,
+          createdAt: submission.createdAt.toISOString(),
+          user: submission.user,
+          exercise: submission.exercise,
+          likeCount,
+          commentCount,
+          isLiked: !!userLike
+        }
+      })
+    )
+
+    return NextResponse.json({ posts: postsWithInteractions })
   } catch (error) {
     console.error('Error fetching community posts:', error)
     return NextResponse.json(

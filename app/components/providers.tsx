@@ -4,6 +4,7 @@
 import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from './theme-provider'
 import { Toaster } from '@/components/ui/toaster'
+import { Toaster as HotToaster } from 'react-hot-toast'
 import { useState, useEffect } from 'react'
 
 interface ProvidersProps {
@@ -31,6 +32,7 @@ export function Providers({ children }: ProvidersProps) {
       >
         {children}
         <Toaster />
+        <HotToaster position="top-right" />
       </ThemeProvider>
     </SessionProvider>
   )

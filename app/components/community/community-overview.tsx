@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PostComments } from '@/components/community/post-comments'
+import { toast } from 'react-hot-toast'
 import Link from 'next/link'
 
 interface CommunityPost {
@@ -28,6 +30,9 @@ interface CommunityPost {
       slug: string
     }
   }
+  likesCount: number
+  commentsCount: number
+  isLikedByUser: boolean
 }
 
 export function CommunityOverview() {
@@ -35,6 +40,7 @@ export function CommunityOverview() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -72,6 +78,48 @@ export function CommunityOverview() {
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  const handleLike = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/likes`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPosts(posts.map(post => 
+          post.id === postId 
+            ? { ...post, likesCount: data.count, isLikedByUser: data.liked }
+            : post
+        ))
+      } else {
+        toast.error('Failed to update like')
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+      toast.error('Failed to update like')
+    }
+  }
+
+  const toggleComments = (postId: string) => {
+    setExpandedComments(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(postId)) {
+        newSet.delete(postId)
+      } else {
+        newSet.add(postId)
+      }
+      return newSet
+    })
+  }
+
+  const updateCommentCount = (postId: string, count: number) => {
+    setPosts(posts.map(post => 
+      post.id === postId 
+        ? { ...post, commentsCount: count }
+        : post
+    ))
   }
 
   if (loading) {
@@ -247,15 +295,25 @@ export function CommunityOverview() {
                       {getExcerpt(post.content)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleLike(post.id)}
+                          className={`text-forest hover:text-rust ${post.isLikedByUser ? 'text-rust' : ''}`}
+                        >
+                          <Heart className={`w-4 h-4 mr-1 ${post.isLikedByUser ? 'fill-rust' : ''}`} />
+                          {post.likesCount > 0 ? post.likesCount : 'Like'}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleComments(post.id)}
+                          className="text-forest hover:text-rust"
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {post.commentsCount > 0 ? post.commentsCount : 'Comment'}
                         </Button>
                       </div>
                       
@@ -267,6 +325,15 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    {expandedComments.has(post.id) && (
+                      <PostComments 
+                        postId={post.id} 
+                        initialCommentsCount={post.commentsCount}
+                        onCommentCountChange={(count) => updateCommentCount(post.id, count)}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

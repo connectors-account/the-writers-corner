@@ -40,6 +40,14 @@ export async function GET() {
               }
             }
           }
+        },
+        likes: true,
+        comments: true,
+        _count: {
+          select: {
+            likes: true,
+            comments: true
+          }
         }
       },
       orderBy: {
@@ -48,14 +56,19 @@ export async function GET() {
       take: 50
     })
 
-    // Convert submissions to community post format
+    const userId = session.user.id
+
+    // Convert submissions to community post format with like/comment info
     const posts = submissions.map(submission => ({
       id: submission.id,
       title: submission.exercise.title,
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission._count.likes,
+      commentCount: submission._count.comments,
+      isLikedByUser: submission.likes.some(like => like.userId === userId)
     }))
 
     return NextResponse.json({ posts })

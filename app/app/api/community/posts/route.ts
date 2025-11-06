@@ -40,6 +40,20 @@ export async function GET() {
               }
             }
           }
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true
+          }
+        },
+        likes: {
+          where: {
+            userId: session.user.id
+          },
+          select: {
+            id: true
+          }
         }
       },
       orderBy: {
@@ -55,7 +69,10 @@ export async function GET() {
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission._count.likes,
+      commentCount: submission._count.comments,
+      isLiked: submission.likes.length > 0
     }))
 
     return NextResponse.json({ posts })

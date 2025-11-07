@@ -2,12 +2,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search, Edit2, Trash2, Send } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
 
@@ -28,13 +30,37 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount: number
+  commentCount: number
+  hasLiked: boolean
+}
+
+interface Comment {
+  id: string
+  content: string
+  createdAt: string
+  updatedAt: string
+  userId: string
+  user: {
+    id: string
+    firstName?: string
+    lastName?: string
+    name?: string
+  }
 }
 
 export function CommunityOverview() {
+  const { data: session } = useSession()
   const [posts, setPosts] = useState<CommunityPost[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
+  const [newComment, setNewComment] = useState<Record<string, string>>({})
+  const [editingComment, setEditingComment] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [loadingComments, setLoadingComments] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -51,6 +77,143 @@ export function CommunityOverview() {
       console.error('Error fetching community posts:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleLikeToggle = async (postId: string) => {
+    const post = posts.find(p => p.id === postId)
+    if (!post) return
+
+    const isLiked = post.hasLiked
+    const endpoint = `/api/community/posts/${postId}/likes`
+
+    try {
+      const response = await fetch(endpoint, {
+        method: isLiked ? 'DELETE' : 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPosts(posts.map(p => 
+          p.id === postId 
+            ? { ...p, likeCount: data.likeCount, hasLiked: data.hasLiked }
+            : p
+        ))
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+    }
+  }
+
+  const fetchComments = async (postId: string) => {
+    setLoadingComments(prev => new Set(prev).add(postId))
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/comments`)
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({ ...prev, [postId]: data.comments }))
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+    } finally {
+      setLoadingComments(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(postId)
+        return newSet
+      })
+    }
+  }
+
+  const toggleComments = async (postId: string) => {
+    if (expandedComments.has(postId)) {
+      setExpandedComments(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(postId)
+        return newSet
+      })
+    } else {
+      setExpandedComments(prev => new Set(prev).add(postId))
+      if (!comments[postId]) {
+        await fetchComments(postId)
+      }
+    }
+  }
+
+  const handleAddComment = async (postId: string) => {
+    const content = newComment[postId]?.trim()
+    if (!content) return
+
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({
+          ...prev,
+          [postId]: [...(prev[postId] || []), data.comment]
+        }))
+        setNewComment(prev => ({ ...prev, [postId]: '' }))
+        setPosts(posts.map(p => 
+          p.id === postId 
+            ? { ...p, commentCount: p.commentCount + 1 }
+            : p
+        ))
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error)
+    }
+  }
+
+  const handleEditComment = async (postId: string, commentId: string) => {
+    const content = editContent.trim()
+    if (!content) return
+
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/comments/${commentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({
+          ...prev,
+          [postId]: prev[postId].map(c => c.id === commentId ? data.comment : c)
+        }))
+        setEditingComment(null)
+        setEditContent('')
+      }
+    } catch (error) {
+      console.error('Error editing comment:', error)
+    }
+  }
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    if (!confirm('Are you sure you want to delete this comment?')) return
+
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/comments/${commentId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setComments(prev => ({
+          ...prev,
+          [postId]: prev[postId].filter(c => c.id !== commentId)
+        }))
+        setPosts(posts.map(p => 
+          p.id === postId 
+            ? { ...p, commentCount: p.commentCount - 1 }
+            : p
+        ))
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error)
     }
   }
 
@@ -249,13 +412,25 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`text-forest hover:text-rust ${post.hasLiked ? 'text-rust' : ''}`}
+                          onClick={() => handleLikeToggle(post.id)}
+                        >
+                          <Heart className={`w-4 h-4 mr-1 ${post.hasLiked ? 'fill-rust' : ''}`} />
+                          {post.likeCount > 0 && <span className="mr-1">{post.likeCount}</span>}
                           Like
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-forest hover:text-rust"
+                          onClick={() => toggleComments(post.id)}
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {post.commentCount > 0 && <span className="mr-1">{post.commentCount}</span>}
+                          Comment{post.commentCount !== 1 ? 's' : ''}
                         </Button>
                       </div>
                       
@@ -267,6 +442,120 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    {expandedComments.has(post.id) && (
+                      <div className="mt-6 border-t-2 border-sepia pt-4">
+                        {/* Comments List */}
+                        {loadingComments.has(post.id) ? (
+                          <div className="text-center py-4">
+                            <div className="animate-pulse text-forest">Loading comments...</div>
+                          </div>
+                        ) : (
+                          <>
+                            {comments[post.id] && comments[post.id].length > 0 ? (
+                              <div className="space-y-4 mb-4">
+                                {comments[post.id].map(comment => (
+                                  <div key={comment.id} className="bg-sepia/30 p-3 rounded">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div>
+                                        <span className="font-typewriter text-sm text-ink font-semibold">
+                                          {comment.user.firstName && comment.user.lastName
+                                            ? `${comment.user.firstName} ${comment.user.lastName}`
+                                            : comment.user.name || 'Anonymous'}
+                                        </span>
+                                        <span className="text-xs text-forest ml-2">
+                                          {new Date(comment.createdAt).toLocaleDateString()}
+                                        </span>
+                                      </div>
+                                      {session?.user?.id === comment.userId && (
+                                        <div className="flex gap-2">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 w-6 p-0"
+                                            onClick={() => {
+                                              setEditingComment(comment.id)
+                                              setEditContent(comment.content)
+                                            }}
+                                          >
+                                            <Edit2 className="w-3 h-3" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 w-6 p-0 text-rust"
+                                            onClick={() => handleDeleteComment(post.id, comment.id)}
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {editingComment === comment.id ? (
+                                      <div className="space-y-2">
+                                        <Textarea
+                                          value={editContent}
+                                          onChange={(e) => setEditContent(e.target.value)}
+                                          className="font-serif text-sm"
+                                          rows={3}
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button
+                                            size="sm"
+                                            onClick={() => handleEditComment(post.id, comment.id)}
+                                            className="btn-vintage text-xs"
+                                          >
+                                            Save
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                              setEditingComment(null)
+                                              setEditContent('')
+                                            }}
+                                            className="text-xs"
+                                          >
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="font-serif text-sm text-forest">{comment.content}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-forest text-center py-4 italic">
+                                No comments yet. Be the first to comment!
+                              </p>
+                            )}
+
+                            {/* Add Comment Form */}
+                            <div className="space-y-2">
+                              <Textarea
+                                placeholder="Write a comment..."
+                                value={newComment[post.id] || ''}
+                                onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
+                                className="font-serif text-sm border-2 border-ink focus:border-rust"
+                                rows={3}
+                              />
+                              <Button
+                                onClick={() => handleAddComment(post.id)}
+                                disabled={!newComment[post.id]?.trim()}
+                                className="btn-vintage"
+                                size="sm"
+                              >
+                                <Send className="w-4 h-4 mr-2" />
+                                Post Comment
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

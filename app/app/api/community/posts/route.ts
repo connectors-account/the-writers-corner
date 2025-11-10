@@ -48,15 +48,37 @@ export async function GET() {
       take: 50
     })
 
-    // Convert submissions to community post format
-    const posts = submissions.map(submission => ({
-      id: submission.id,
-      title: submission.exercise.title,
-      content: submission.content,
-      createdAt: submission.createdAt.toISOString(),
-      user: submission.user,
-      exercise: submission.exercise
-    }))
+    // Get like counts and comment counts for each post
+    const postsWithCounts = await Promise.all(
+      submissions.map(async (submission) => {
+        const [likeCount, commentCount, userLike] = await Promise.all([
+          prisma.like.count({ where: { postId: submission.id } }),
+          prisma.comment.count({ where: { postId: submission.id } }),
+          prisma.like.findUnique({
+            where: {
+              userId_postId: {
+                userId: session.user.id,
+                postId: submission.id
+              }
+            }
+          })
+        ])
+
+        return {
+          id: submission.id,
+          title: submission.exercise.title,
+          content: submission.content,
+          createdAt: submission.createdAt.toISOString(),
+          user: submission.user,
+          exercise: submission.exercise,
+          likeCount,
+          commentCount,
+          isLiked: !!userLike
+        }
+      })
+    )
+
+    const posts = postsWithCounts
 
     return NextResponse.json({ posts })
   } catch (error) {

@@ -50,6 +50,8 @@ model User {
   submissions   ExerciseSubmission[]
   communityPosts CommunityPost[]
   progress      UserProgress[]
+  likes         Like[]
+  comments      Comment[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -109,6 +111,8 @@ model CommunityPost {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   exerciseId String? // Optional link to specific exercise
   isPublic  Boolean  @default(true)
+  likes     Like[]
+  comments  Comment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -136,4 +140,26 @@ model UserProgress {
   updatedAt   DateTime  @updatedAt
 
   @@unique([userId, milestoneId])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  userId    String
+  postId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

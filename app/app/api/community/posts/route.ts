@@ -26,6 +26,7 @@ export async function GET() {
       include: {
         user: {
           select: {
+            id: true,
             firstName: true,
             lastName: true,
             name: true
@@ -39,6 +40,16 @@ export async function GET() {
                 slug: true
               }
             }
+          }
+        },
+        likes: {
+          select: {
+            userId: true
+          }
+        },
+        comments: {
+          select: {
+            id: true
           }
         }
       },
@@ -55,7 +66,10 @@ export async function GET() {
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission.likes.length,
+      commentCount: submission.comments.length,
+      userLiked: submission.likes.some(like => like.userId === session.user.id)
     }))
 
     return NextResponse.json({ posts })

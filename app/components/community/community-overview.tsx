@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CommentsSection } from '@/components/community/comments-section'
 import Link from 'next/link'
 
 interface CommunityPost {
@@ -28,6 +29,9 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount: number
+  commentCount: number
+  isLikedByUser: boolean
 }
 
 export function CommunityOverview() {
@@ -35,6 +39,8 @@ export function CommunityOverview() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  const [likingPosts, setLikingPosts] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -52,6 +58,56 @@ export function CommunityOverview() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLike = async (postId: string) => {
+    // Prevent multiple simultaneous like requests
+    if (likingPosts.has(postId)) return
+
+    setLikingPosts(prev => new Set(prev).add(postId))
+
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/like`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Update the post in the local state
+        setPosts(prevPosts => 
+          prevPosts.map(post => 
+            post.id === postId 
+              ? { 
+                  ...post, 
+                  isLikedByUser: data.liked,
+                  likeCount: data.likeCount 
+                }
+              : post
+          )
+        )
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+    } finally {
+      setLikingPosts(prev => {
+        const next = new Set(prev)
+        next.delete(postId)
+        return next
+      })
+    }
+  }
+
+  const toggleComments = (postId: string) => {
+    setExpandedComments(prev => {
+      const next = new Set(prev)
+      if (next.has(postId)) {
+        next.delete(postId)
+      } else {
+        next.add(postId)
+      }
+      return next
+    })
   }
 
   const filteredPosts = posts.filter(post => {
@@ -249,13 +305,30 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleLike(post.id)}
+                          disabled={likingPosts.has(post.id)}
+                          className={`${
+                            post.isLikedByUser 
+                              ? 'text-rust hover:text-rust/80' 
+                              : 'text-forest hover:text-rust'
+                          }`}
+                        >
+                          <Heart 
+                            className={`w-4 h-4 mr-1 ${post.isLikedByUser ? 'fill-current' : ''}`} 
+                          />
+                          {post.likeCount > 0 && post.likeCount}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleComments(post.id)}
+                          className="text-forest hover:text-rust"
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {post.commentCount > 0 && post.commentCount}
                         </Button>
                       </div>
                       
@@ -267,6 +340,24 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+                    
+                    {/* Comments Section */}
+                    {expandedComments.has(post.id) && (
+                      <div className="mt-4 pt-4 border-t-2 border-sepia">
+                        <CommentsSection 
+                          postId={post.id} 
+                          onCommentChange={(delta) => {
+                            setPosts(prevPosts => 
+                              prevPosts.map(p => 
+                                p.id === post.id 
+                                  ? { ...p, commentCount: p.commentCount + delta }
+                                  : p
+                              )
+                            )
+                          }}
+                        />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

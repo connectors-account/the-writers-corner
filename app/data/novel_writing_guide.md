@@ -1,3 +1,5 @@
+> **Note:** This guide is designed to be worked through progressively. Each section builds upon previous concepts, so we recommend following the topics in order for the best learning experience.
+
 # The Complete Guide to Novel Writing: Four Essential Craft Topics
 
 This comprehensive guide covers the fundamental building blocks of successful novel writing. Each section provides both theoretical understanding and hands-on exercises designed to develop your skills progressively from basic concepts to advanced techniques.

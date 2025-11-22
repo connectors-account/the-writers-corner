@@ -10,6 +10,7 @@ import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from '
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
+import { CommentSection } from './comment-section'
 
 interface CommunityPost {
   id: string
@@ -28,6 +29,9 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount: number
+  isLiked: boolean
+  commentCount: number
 }
 
 export function CommunityOverview() {
@@ -35,6 +39,7 @@ export function CommunityOverview() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -52,6 +57,43 @@ export function CommunityOverview() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLike = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/like`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPosts(posts.map(post => 
+          post.id === postId 
+            ? { ...post, isLiked: data.isLiked, likeCount: data.likeCount }
+            : post
+        ))
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+    }
+  }
+
+  const toggleComments = (postId: string) => {
+    setExpandedComments(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(postId)) {
+        newSet.delete(postId)
+      } else {
+        newSet.add(postId)
+      }
+      return newSet
+    })
+  }
+
+  const handleCommentCountChange = (postId: string, count: number) => {
+    setPosts(posts.map(post => 
+      post.id === postId ? { ...post, commentCount: count } : post
+    ))
   }
 
   const filteredPosts = posts.filter(post => {
@@ -249,13 +291,23 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`hover:text-rust ${post.isLiked ? 'text-rust' : 'text-forest'}`}
+                          onClick={() => handleLike(post.id)}
+                        >
+                          <Heart className={`w-4 h-4 mr-1 ${post.isLiked ? 'fill-current' : ''}`} />
+                          {post.likeCount > 0 ? post.likeCount : 'Like'}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-forest hover:text-rust"
+                          onClick={() => toggleComments(post.id)}
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {post.commentCount > 0 ? post.commentCount : 'Comment'}
                         </Button>
                       </div>
                       
@@ -267,6 +319,14 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    {expandedComments.has(post.id) && (
+                      <CommentSection 
+                        postId={post.id}
+                        onCommentCountChange={(count) => handleCommentCountChange(post.id, count)}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

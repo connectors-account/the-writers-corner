@@ -2,14 +2,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search, Send, Edit2, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { toast } from 'sonner'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 
 interface CommunityPost {
   id: string
@@ -30,11 +33,37 @@ interface CommunityPost {
   }
 }
 
+interface Comment {
+  id: string
+  content: string
+  createdAt: string
+  updatedAt: string
+  user: {
+    id: string
+    firstName?: string
+    lastName?: string
+    name?: string
+  }
+}
+
+interface PostInteractions {
+  likes: {
+    count: number
+    isLiked: boolean
+  }
+  comments: Comment[]
+  showComments: boolean
+}
+
 export function CommunityOverview() {
+  const { data: session } = useSession()
   const [posts, setPosts] = useState<CommunityPost[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [interactions, setInteractions] = useState<Record<string, PostInteractions>>({})
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
+  const [editingComment, setEditingComment] = useState<{ postId: string; commentId: string; content: string } | null>(null)
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -45,12 +74,197 @@ export function CommunityOverview() {
       const response = await fetch('/api/community/posts')
       if (response.ok) {
         const data = await response.json()
-        setPosts(data.posts || [])
+        const fetchedPosts = data.posts || []
+        setPosts(fetchedPosts)
+        
+        // Fetch likes and comments for each post
+        const interactionsData: Record<string, PostInteractions> = {}
+        for (const post of fetchedPosts) {
+          interactionsData[post.id] = {
+            likes: { count: 0, isLiked: false },
+            comments: [],
+            showComments: false
+          }
+          fetchPostInteractions(post.id)
+        }
+        setInteractions(interactionsData)
       }
     } catch (error) {
       console.error('Error fetching community posts:', error)
+      toast.error('Failed to load community posts')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchPostInteractions = async (postId: string) => {
+    try {
+      // Fetch likes
+      const likesResponse = await fetch(`/api/posts/${postId}/likes`)
+      if (likesResponse.ok) {
+        const likesData = await likesResponse.json()
+        setInteractions(prev => ({
+          ...prev,
+          [postId]: {
+            ...prev[postId],
+            likes: { count: likesData.count, isLiked: likesData.isLiked }
+          }
+        }))
+      }
+
+      // Fetch comments
+      const commentsResponse = await fetch(`/api/posts/${postId}/comments`)
+      if (commentsResponse.ok) {
+        const commentsData = await commentsResponse.json()
+        setInteractions(prev => ({
+          ...prev,
+          [postId]: {
+            ...prev[postId],
+            comments: commentsData.comments
+          }
+        }))
+      }
+    } catch (error) {
+      console.error('Error fetching post interactions:', error)
+    }
+  }
+
+  const handleLike = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/like`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setInteractions(prev => ({
+          ...prev,
+          [postId]: {
+            ...prev[postId],
+            likes: {
+              count: data.liked 
+                ? prev[postId].likes.count + 1 
+                : prev[postId].likes.count - 1,
+              isLiked: data.liked
+            }
+          }
+        }))
+      } else {
+        toast.error('Failed to update like')
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+      toast.error('Failed to update like')
+    }
+  }
+
+  const toggleComments = (postId: string) => {
+    setInteractions(prev => ({
+      ...prev,
+      [postId]: {
+        ...prev[postId],
+        showComments: !prev[postId].showComments
+      }
+    }))
+  }
+
+  const handleAddComment = async (postId: string) => {
+    const content = commentInputs[postId]?.trim()
+    if (!content) {
+      toast.error('Please enter a comment')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setInteractions(prev => ({
+          ...prev,
+          [postId]: {
+            ...prev[postId],
+            comments: [data.comment, ...prev[postId].comments]
+          }
+        }))
+        setCommentInputs(prev => ({ ...prev, [postId]: '' }))
+        toast.success('Comment added successfully')
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to add comment')
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error)
+      toast.error('Failed to add comment')
+    }
+  }
+
+  const handleEditComment = async (postId: string, commentId: string) => {
+    if (!editingComment || !editingComment.content.trim()) {
+      toast.error('Please enter a comment')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/comments/${commentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editingComment.content })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setInteractions(prev => ({
+          ...prev,
+          [postId]: {
+            ...prev[postId],
+            comments: prev[postId].comments.map(c => 
+              c.id === commentId ? data.comment : c
+            )
+          }
+        }))
+        setEditingComment(null)
+        toast.success('Comment updated successfully')
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to update comment')
+      }
+    } catch (error) {
+      console.error('Error updating comment:', error)
+      toast.error('Failed to update comment')
+    }
+  }
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    if (!confirm('Are you sure you want to delete this comment?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/comments/${commentId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setInteractions(prev => ({
+          ...prev,
+          [postId]: {
+            ...prev[postId],
+            comments: prev[postId].comments.filter(c => c.id !== commentId)
+          }
+        }))
+        toast.success('Comment deleted successfully')
+      } else {
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to delete comment')
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error)
+      toast.error('Failed to delete comment')
     }
   }
 
@@ -247,15 +461,33 @@ export function CommunityOverview() {
                       {getExcerpt(post.content)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`${
+                            interactions[post.id]?.likes.isLiked 
+                              ? 'text-rust hover:text-rust/80' 
+                              : 'text-forest hover:text-rust'
+                          }`}
+                          onClick={() => handleLike(post.id)}
+                        >
+                          <Heart 
+                            className={`w-4 h-4 mr-1 ${
+                              interactions[post.id]?.likes.isLiked ? 'fill-current' : ''
+                            }`} 
+                          />
+                          {interactions[post.id]?.likes.count || 0}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-forest hover:text-rust"
+                          onClick={() => toggleComments(post.id)}
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {interactions[post.id]?.comments.length || 0}
                         </Button>
                       </div>
                       
@@ -267,6 +499,134 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    <AnimatePresence>
+                      {interactions[post.id]?.showComments && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="border-t-2 border-sepia pt-4"
+                        >
+                          {/* Comment Input */}
+                          <div className="mb-4">
+                            <div className="flex gap-2">
+                              <Textarea
+                                placeholder="Share your thoughts..."
+                                value={commentInputs[post.id] || ''}
+                                onChange={(e) => setCommentInputs(prev => ({ 
+                                  ...prev, 
+                                  [post.id]: e.target.value 
+                                }))}
+                                className="font-serif border-2 border-ink focus:border-rust resize-none"
+                                rows={2}
+                              />
+                              <Button 
+                                onClick={() => handleAddComment(post.id)}
+                                className="btn-vintage self-end"
+                                size="sm"
+                              >
+                                <Send className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Comments List */}
+                          <div className="space-y-3">
+                            {interactions[post.id]?.comments.length === 0 ? (
+                              <p className="text-sm font-serif text-forest/60 text-center py-4">
+                                No comments yet. Be the first to share your thoughts!
+                              </p>
+                            ) : (
+                              interactions[post.id]?.comments.map((comment) => (
+                                <motion.div
+                                  key={comment.id}
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="bg-sepia/30 rounded p-3 border border-ink/10"
+                                >
+                                  {editingComment?.commentId === comment.id ? (
+                                    <div className="space-y-2">
+                                      <Textarea
+                                        value={editingComment.content}
+                                        onChange={(e) => setEditingComment({
+                                          ...editingComment,
+                                          content: e.target.value
+                                        })}
+                                        className="font-serif border-2 border-ink focus:border-rust resize-none"
+                                        rows={2}
+                                      />
+                                      <div className="flex gap-2">
+                                        <Button
+                                          onClick={() => handleEditComment(post.id, comment.id)}
+                                          size="sm"
+                                          className="btn-vintage text-xs"
+                                        >
+                                          Save
+                                        </Button>
+                                        <Button
+                                          onClick={() => setEditingComment(null)}
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div>
+                                          <span className="font-typewriter text-sm text-ink font-semibold">
+                                            {comment.user.firstName && comment.user.lastName
+                                              ? `${comment.user.firstName} ${comment.user.lastName}`
+                                              : comment.user.name || 'Anonymous'}
+                                          </span>
+                                          <span className="text-xs font-serif text-forest/60 ml-2">
+                                            {formatDate(comment.createdAt)}
+                                            {comment.updatedAt !== comment.createdAt && ' (edited)'}
+                                          </span>
+                                        </div>
+                                        {session?.user?.id === comment.user.id && (
+                                          <div className="flex gap-1">
+                                            <Button
+                                              onClick={() => setEditingComment({
+                                                postId: post.id,
+                                                commentId: comment.id,
+                                                content: comment.content
+                                              })}
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-7 w-7 p-0 text-forest hover:text-rust"
+                                            >
+                                              <Edit2 className="w-3 h-3" />
+                                            </Button>
+                                            <Button
+                                              onClick={() => handleDeleteComment(post.id, comment.id)}
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-7 w-7 p-0 text-forest hover:text-rust"
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <p className="font-serif text-sm text-forest leading-relaxed">
+                                        {comment.content}
+                                      </p>
+                                    </>
+                                  )}
+                                </motion.div>
+                              ))
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </CardContent>
                 </Card>
               </motion.div>

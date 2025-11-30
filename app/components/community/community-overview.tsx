@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CommentSection } from '@/components/community/comment-section'
 import Link from 'next/link'
 
 interface CommunityPost {
@@ -28,6 +29,9 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount?: number
+  isLiked?: boolean
+  commentCount?: number
 }
 
 export function CommunityOverview() {
@@ -35,6 +39,7 @@ export function CommunityOverview() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [expandedComments, setExpandedComments] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -45,13 +50,81 @@ export function CommunityOverview() {
       const response = await fetch('/api/community/posts')
       if (response.ok) {
         const data = await response.json()
-        setPosts(data.posts || [])
+        const postsWithLikes = await Promise.all(
+          (data.posts || []).map(async (post: CommunityPost) => {
+            try {
+              const likesRes = await fetch(`/api/posts/${post.id}/likes`)
+              const commentsRes = await fetch(`/api/posts/${post.id}/comments`)
+              
+              let likeData = { likeCount: 0, isLiked: false }
+              let commentData = { comments: [] }
+              
+              if (likesRes.ok) {
+                likeData = await likesRes.json()
+              }
+              
+              if (commentsRes.ok) {
+                commentData = await commentsRes.json()
+              }
+              
+              return {
+                ...post,
+                likeCount: likeData.likeCount,
+                isLiked: likeData.isLiked,
+                commentCount: commentData.comments?.length || 0
+              }
+            } catch (err) {
+              console.error('Error fetching post details:', err)
+              return {
+                ...post,
+                likeCount: 0,
+                isLiked: false,
+                commentCount: 0
+              }
+            }
+          })
+        )
+        setPosts(postsWithLikes)
       }
     } catch (error) {
       console.error('Error fetching community posts:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLike = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/like`, {
+        method: 'POST'
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        // Update the post in the state
+        setPosts(prevPosts =>
+          prevPosts.map(post =>
+            post.id === postId
+              ? { ...post, likeCount: data.likeCount, isLiked: data.isLiked }
+              : post
+          )
+        )
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+    }
+  }
+
+  const toggleComments = (postId: string) => {
+    setExpandedComments(prev => prev === postId ? null : postId)
+  }
+
+  const handleCommentCountChange = (postId: string, count: number) => {
+    setPosts(prevPosts =>
+      prevPosts.map(post =>
+        post.id === postId ? { ...post, commentCount: count } : post
+      )
+    )
   }
 
   const filteredPosts = posts.filter(post => {
@@ -249,13 +322,25 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`text-forest hover:text-rust ${post.isLiked ? 'text-rust' : ''}`}
+                          onClick={() => handleLike(post.id)}
+                        >
+                          <Heart 
+                            className={`w-4 h-4 mr-1 ${post.isLiked ? 'fill-rust' : ''}`} 
+                          />
+                          {post.likeCount || 0} {post.likeCount === 1 ? 'Like' : 'Likes'}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`text-forest hover:text-rust ${expandedComments === post.id ? 'text-rust' : ''}`}
+                          onClick={() => toggleComments(post.id)}
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {post.commentCount || 0} {post.commentCount === 1 ? 'Comment' : 'Comments'}
                         </Button>
                       </div>
                       
@@ -267,6 +352,14 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comment Section */}
+                    {expandedComments === post.id && (
+                      <CommentSection
+                        postId={post.id}
+                        onCommentCountChange={(count) => handleCommentCountChange(post.id, count)}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

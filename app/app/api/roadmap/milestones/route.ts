@@ -34,7 +34,7 @@ export async function GET() {
     })
 
     // Transform to include completed status
-    const milestonesWithProgress = milestones.map(milestone => ({
+    const milestonesWithProgress = milestones.map((milestone: any) => ({
       id: milestone.id,
       title: milestone.title,
       description: milestone.description,

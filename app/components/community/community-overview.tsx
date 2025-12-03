@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PostLikeButton } from '@/components/community/post-like-button'
+import { PostComments } from '@/components/community/post-comments'
 import Link from 'next/link'
 
 interface CommunityPost {
@@ -247,25 +249,22 @@ export function CommunityOverview() {
                       {getExcerpt(post.content)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <PostLikeButton postId={post.id} />
+                        </div>
+                        
+                        {post.exercise && (
+                          <Link href={`/topics/${post.exercise.topic.slug}`}>
+                            <Button variant="outline" size="sm" className="btn-vintage text-xs">
+                              Try This Exercise
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                       
-                      {post.exercise && (
-                        <Link href={`/topics/${post.exercise.topic.slug}`}>
-                          <Button variant="outline" size="sm" className="btn-vintage text-xs">
-                            Try This Exercise
-                          </Button>
-                        </Link>
-                      )}
+                      <PostComments postId={post.id} />
                     </div>
                   </CardContent>
                 </Card>

@@ -10,6 +10,7 @@ import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from '
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
+import { PostCard } from '@/components/community/post-card'
 
 interface CommunityPost {
   id: string
@@ -60,19 +61,6 @@ export function CommunityOverview() {
     const matchesTopic = topicFilter === 'all' || post.exercise?.topic.slug === topicFilter
     return matchesSearch && matchesTopic
   })
-
-  const getExcerpt = (content: string, maxLength: number = 200) => {
-    if (content.length <= maxLength) return content
-    return content.substring(0, maxLength) + '...'
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-  }
 
   if (loading) {
     return (
@@ -205,71 +193,7 @@ export function CommunityOverview() {
         ) : (
           <div className="space-y-6">
             {filteredPosts.map((post, index) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-              >
-                <Card className="card-vintage border-2 hover:shadow-xl transition-all duration-300">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="font-typewriter text-ink text-xl mb-2">
-                          {post.title || 'Exercise Response'}
-                        </CardTitle>
-                        <div className="flex items-center gap-3 mb-3">
-                          <Badge className="bg-rust/20 text-rust font-typewriter">
-                            {post.user?.firstName && post.user?.lastName 
-                              ? `${post.user.firstName} ${post.user.lastName}`
-                              : post.user?.name || 'Anonymous Writer'
-                            }
-                          </Badge>
-                          {post.exercise && (
-                            <Badge className="bg-gold/20 text-ink font-typewriter">
-                              {post.exercise.topic.title}
-                            </Badge>
-                          )}
-                          <span className="text-sm font-serif text-forest">
-                            {formatDate(post.createdAt)}
-                          </span>
-                        </div>
-                        {post.exercise && (
-                          <p className="text-sm font-serif text-forest mb-2">
-                            From exercise: <span className="font-semibold">{post.exercise.title}</span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="font-serif text-forest leading-relaxed mb-4">
-                      {getExcerpt(post.content)}
-                    </p>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
-                      </div>
-                      
-                      {post.exercise && (
-                        <Link href={`/topics/${post.exercise.topic.slug}`}>
-                          <Button variant="outline" size="sm" className="btn-vintage text-xs">
-                            Try This Exercise
-                          </Button>
-                        </Link>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
+              <PostCard key={post.id} post={post} index={index} />
             ))}
           </div>
         )}

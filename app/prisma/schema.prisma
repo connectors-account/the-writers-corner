@@ -49,6 +49,8 @@ model User {
   sessions      Session[]
   submissions   ExerciseSubmission[]
   communityPosts CommunityPost[]
+  postLikes     PostLike[]
+  postComments  PostComment[]
   progress      UserProgress[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -111,6 +113,29 @@ model CommunityPost {
   isPublic  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PostLike {
+  id        String   @id @default(cuid())
+  postId    String   // This references ExerciseSubmission id (community posts)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+}
+
+model PostComment {
+  id        String   @id @default(cuid())
+  postId    String   // This references ExerciseSubmission id (community posts)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
 }
 
 model Milestone {

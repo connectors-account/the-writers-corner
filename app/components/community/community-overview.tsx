@@ -10,6 +10,8 @@ import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from '
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
+import { LikeButton } from './like-button'
+import { CommentSection } from './comment-section'
 
 interface CommunityPost {
   id: string
@@ -247,25 +249,21 @@ export function CommunityOverview() {
                       {getExcerpt(post.content)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <LikeButton postId={post.id} />
+                          <CommentSection postId={post.id} />
+                        </div>
+                        
+                        {post.exercise && (
+                          <Link href={`/topics/${post.exercise.topic.slug}`}>
+                            <Button variant="outline" size="sm" className="btn-vintage text-xs">
+                              Try This Exercise
+                            </Button>
+                          </Link>
+                        )}
                       </div>
-                      
-                      {post.exercise && (
-                        <Link href={`/topics/${post.exercise.topic.slug}`}>
-                          <Button variant="outline" size="sm" className="btn-vintage text-xs">
-                            Try This Exercise
-                          </Button>
-                        </Link>
-                      )}
                     </div>
                   </CardContent>
                 </Card>

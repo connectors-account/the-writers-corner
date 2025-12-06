@@ -40,7 +40,9 @@ export async function GET() {
               }
             }
           }
-        }
+        },
+        likes: true,
+        comments: true
       },
       orderBy: {
         createdAt: 'desc'
@@ -48,15 +50,32 @@ export async function GET() {
       take: 50
     })
 
-    // Convert submissions to community post format
-    const posts = submissions.map(submission => ({
-      id: submission.id,
-      title: submission.exercise.title,
-      content: submission.content,
-      createdAt: submission.createdAt.toISOString(),
-      user: submission.user,
-      exercise: submission.exercise
-    }))
+    // Convert submissions to community post format with like and comment counts
+    const posts = await Promise.all(
+      submissions.map(async (submission) => {
+        // Check if current user has liked this post
+        const userLike = await prisma.like.findUnique({
+          where: {
+            userId_exerciseSubmissionId: {
+              userId: session.user.id,
+              exerciseSubmissionId: submission.id
+            }
+          }
+        })
+
+        return {
+          id: submission.id,
+          title: submission.exercise.title,
+          content: submission.content,
+          createdAt: submission.createdAt.toISOString(),
+          user: submission.user,
+          exercise: submission.exercise,
+          likeCount: submission.likes.length,
+          commentCount: submission.comments.length,
+          liked: !!userLike
+        }
+      })
+    )
 
     return NextResponse.json({ posts })
   } catch (error) {

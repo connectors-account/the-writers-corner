@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PostComments } from '@/components/community/post-comments'
+import { toast } from 'sonner'
 import Link from 'next/link'
 
 interface CommunityPost {
@@ -28,6 +30,9 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount: number
+  commentCount: number
+  isLikedByUser: boolean
 }
 
 export function CommunityOverview() {
@@ -72,6 +77,28 @@ export function CommunityOverview() {
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  const handleLike = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/like`, {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPosts(posts.map(post => 
+          post.id === postId 
+            ? { ...post, isLikedByUser: data.liked, likeCount: data.likeCount }
+            : post
+        ))
+      } else {
+        toast.error('Failed to update like')
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+      toast.error('Failed to update like')
+    }
   }
 
   if (loading) {
@@ -247,16 +274,21 @@ export function CommunityOverview() {
                       {getExcerpt(post.content)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleLike(post.id)}
+                          className={`${post.isLikedByUser ? 'text-rust' : 'text-forest'} hover:text-rust transition-colors`}
+                        >
+                          <Heart className={`w-4 h-4 mr-1 ${post.isLikedByUser ? 'fill-rust' : ''}`} />
+                          {post.likeCount > 0 ? post.likeCount : 'Like'}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
+                        <div className="flex items-center gap-1 text-forest">
+                          <MessageCircle className="w-4 h-4" />
+                          <span className="text-sm font-typewriter">{post.commentCount}</span>
+                        </div>
                       </div>
                       
                       {post.exercise && (
@@ -267,6 +299,8 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    <PostComments postId={post.id} initialCommentCount={post.commentCount} />
                   </CardContent>
                 </Card>
               </motion.div>

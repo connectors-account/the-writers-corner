@@ -18,6 +18,8 @@ export async function GET() {
       )
     }
 
+    const userId = session.user.id
+
     // Fetch public exercise submissions
     const submissions = await prisma.exerciseSubmission.findMany({
       where: {
@@ -40,6 +42,20 @@ export async function GET() {
               }
             }
           }
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true
+          }
+        },
+        likes: {
+          where: {
+            userId: userId
+          },
+          select: {
+            id: true
+          }
         }
       },
       orderBy: {
@@ -55,7 +71,10 @@ export async function GET() {
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission._count.likes,
+      commentCount: submission._count.comments,
+      isLikedByUser: submission.likes.length > 0
     }))
 
     return NextResponse.json({ posts })

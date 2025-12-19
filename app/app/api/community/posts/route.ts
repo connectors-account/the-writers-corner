@@ -40,6 +40,12 @@ export async function GET() {
               }
             }
           }
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true
+          }
         }
       },
       orderBy: {
@@ -48,6 +54,21 @@ export async function GET() {
       take: 50
     })
 
+    // Get user's likes for these submissions
+    const userLikes = await prisma.like.findMany({
+      where: {
+        userId: session.user.id,
+        submissionId: {
+          in: submissions.map(s => s.id)
+        }
+      },
+      select: {
+        submissionId: true
+      }
+    })
+
+    const likedSubmissionIds = new Set(userLikes.map(like => like.submissionId))
+
     // Convert submissions to community post format
     const posts = submissions.map(submission => ({
       id: submission.id,
@@ -55,7 +76,10 @@ export async function GET() {
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission._count.likes,
+      commentCount: submission._count.comments,
+      liked: likedSubmissionIds.has(submission.id)
     }))
 
     return NextResponse.json({ posts })

@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -18,7 +17,9 @@ export async function GET() {
       )
     }
 
-    // Fetch public exercise submissions
+    const userId = session.user.id
+
+    // Fetch public exercise submissions with likes and comments count
     const submissions = await prisma.exerciseSubmission.findMany({
       where: {
         isPublic: true
@@ -40,6 +41,17 @@ export async function GET() {
               }
             }
           }
+        },
+        likes: {
+          select: {
+            userId: true
+          }
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true
+          }
         }
       },
       orderBy: {
@@ -55,7 +67,10 @@ export async function GET() {
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission._count.likes,
+      commentCount: submission._count.comments,
+      isLikedByUser: submission.likes.some(like => like.userId === userId)
     }))
 
     return NextResponse.json({ posts })

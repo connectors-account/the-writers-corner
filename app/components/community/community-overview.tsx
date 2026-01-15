@@ -2,14 +2,26 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search, Send, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
+
+interface PostComment {
+  id: string
+  content: string
+  createdAt: string
+  user: {
+    firstName?: string
+    lastName?: string
+    name?: string
+  }
+}
 
 interface CommunityPost {
   id: string
@@ -28,6 +40,9 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount: number
+  commentCount: number
+  isLikedByUser: boolean
 }
 
 export function CommunityOverview() {
@@ -35,6 +50,12 @@ export function CommunityOverview() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [topicFilter, setTopicFilter] = useState('all')
+  const [expandedComments, setExpandedComments] = useState<string | null>(null)
+  const [comments, setComments] = useState<Record<string, PostComment[]>>({})
+  const [loadingComments, setLoadingComments] = useState<string | null>(null)
+  const [newComment, setNewComment] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [likingPost, setLikingPost] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCommunityPosts()
@@ -51,6 +72,89 @@ export function CommunityOverview() {
       console.error('Error fetching community posts:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleLikeToggle = async (postId: string) => {
+    if (likingPost) return
+    
+    setLikingPost(postId)
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/like`, {
+        method: 'POST'
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setPosts(posts.map(post => 
+          post.id === postId 
+            ? { ...post, likeCount: data.likeCount, isLikedByUser: data.liked }
+            : post
+        ))
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+    } finally {
+      setLikingPost(null)
+    }
+  }
+
+  const fetchComments = async (postId: string) => {
+    setLoadingComments(postId)
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/comments`)
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({ ...prev, [postId]: data.comments || [] }))
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+    } finally {
+      setLoadingComments(null)
+    }
+  }
+
+  const handleToggleComments = async (postId: string) => {
+    if (expandedComments === postId) {
+      setExpandedComments(null)
+    } else {
+      setExpandedComments(postId)
+      if (!comments[postId]) {
+        await fetchComments(postId)
+      }
+    }
+  }
+
+  const handleSubmitComment = async (postId: string) => {
+    if (!newComment.trim() || submittingComment) return
+    
+    setSubmittingComment(true)
+    try {
+      const response = await fetch(`/api/community/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ content: newComment })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setComments(prev => ({
+          ...prev,
+          [postId]: [...(prev[postId] || []), data.comment]
+        }))
+        setPosts(posts.map(post => 
+          post.id === postId 
+            ? { ...post, commentCount: post.commentCount + 1 }
+            : post
+        ))
+        setNewComment('')
+      }
+    } catch (error) {
+      console.error('Error submitting comment:', error)
+    } finally {
+      setSubmittingComment(false)
     }
   }
 
@@ -72,6 +176,13 @@ export function CommunityOverview() {
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  const getUserDisplayName = (user: { firstName?: string; lastName?: string; name?: string }) => {
+    if (user.firstName && user.lastName) {
+      return `${user.firstName} ${user.lastName}`
+    }
+    return user.name || 'Anonymous Writer'
   }
 
   if (loading) {
@@ -220,10 +331,7 @@ export function CommunityOverview() {
                         </CardTitle>
                         <div className="flex items-center gap-3 mb-3">
                           <Badge className="bg-rust/20 text-rust font-typewriter">
-                            {post.user?.firstName && post.user?.lastName 
-                              ? `${post.user.firstName} ${post.user.lastName}`
-                              : post.user?.name || 'Anonymous Writer'
-                            }
+                            {getUserDisplayName(post.user)}
                           </Badge>
                           {post.exercise && (
                             <Badge className="bg-gold/20 text-ink font-typewriter">
@@ -249,13 +357,26 @@ export function CommunityOverview() {
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`${post.isLikedByUser ? 'text-rust' : 'text-forest'} hover:text-rust transition-colors`}
+                          onClick={() => handleLikeToggle(post.id)}
+                          disabled={likingPost === post.id}
+                        >
+                          <Heart 
+                            className={`w-4 h-4 mr-1 ${post.isLikedByUser ? 'fill-rust' : ''}`} 
+                          />
+                          {post.likeCount > 0 ? post.likeCount : ''} {post.likeCount === 1 ? 'Like' : 'Likes'}
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={`${expandedComments === post.id ? 'text-rust' : 'text-forest'} hover:text-rust`}
+                          onClick={() => handleToggleComments(post.id)}
+                        >
                           <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
+                          {post.commentCount > 0 ? post.commentCount : ''} {post.commentCount === 1 ? 'Comment' : 'Comments'}
                         </Button>
                       </div>
                       
@@ -267,6 +388,71 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    {/* Comments Section */}
+                    <AnimatePresence>
+                      {expandedComments === post.id && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="mt-4 pt-4 border-t-2 border-ink/20"
+                        >
+                          {/* Comment Input */}
+                          <div className="flex gap-2 mb-4">
+                            <Textarea
+                              placeholder="Write a comment..."
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                              className="font-serif border-2 border-ink focus:border-rust min-h-[60px] resize-none"
+                              rows={2}
+                            />
+                            <Button
+                              onClick={() => handleSubmitComment(post.id)}
+                              disabled={!newComment.trim() || submittingComment}
+                              className="btn-vintage self-end"
+                            >
+                              <Send className="w-4 h-4" />
+                            </Button>
+                          </div>
+
+                          {/* Comments List */}
+                          {loadingComments === post.id ? (
+                            <div className="text-center py-4">
+                              <div className="animate-pulse">
+                                <div className="h-4 bg-sepia rounded w-1/2 mx-auto"></div>
+                              </div>
+                            </div>
+                          ) : comments[post.id]?.length > 0 ? (
+                            <div className="space-y-3">
+                              {comments[post.id].map((comment) => (
+                                <div 
+                                  key={comment.id} 
+                                  className="bg-sepia/30 p-3 rounded-sm border border-ink/10"
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-typewriter text-sm text-rust">
+                                      {getUserDisplayName(comment.user)}
+                                    </span>
+                                    <span className="text-xs font-serif text-forest">
+                                      {formatDate(comment.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="font-serif text-forest text-sm">
+                                    {comment.content}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-center font-serif text-forest text-sm py-2">
+                              No comments yet. Be the first to comment!
+                            </p>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </CardContent>
                 </Card>
               </motion.div>

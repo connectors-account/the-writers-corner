@@ -18,7 +18,9 @@ export async function GET() {
       )
     }
 
-    // Fetch public exercise submissions
+    const currentUserId = session.user.id
+
+    // Fetch public exercise submissions with likes and comments count
     const submissions = await prisma.exerciseSubmission.findMany({
       where: {
         isPublic: true
@@ -40,6 +42,16 @@ export async function GET() {
               }
             }
           }
+        },
+        likes: {
+          select: {
+            userId: true
+          }
+        },
+        comments: {
+          select: {
+            id: true
+          }
         }
       },
       orderBy: {
@@ -55,7 +67,10 @@ export async function GET() {
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission.likes.length,
+      isLikedByCurrentUser: submission.likes.some(like => like.userId === currentUserId),
+      commentCount: submission.comments.length
     }))
 
     return NextResponse.json({ posts })

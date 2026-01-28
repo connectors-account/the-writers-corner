@@ -50,6 +50,8 @@ model User {
   submissions   ExerciseSubmission[]
   communityPosts CommunityPost[]
   progress      UserProgress[]
+  likes         SubmissionLike[]
+  comments      SubmissionComment[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -95,10 +97,37 @@ model ExerciseSubmission {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
   isPublic   Boolean  @default(false)
+  likes      SubmissionLike[]
+  comments   SubmissionComment[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@unique([userId, exerciseId])
+}
+
+model SubmissionLike {
+  id           String             @id @default(cuid())
+  userId       String
+  submissionId String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submission   ExerciseSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime           @default(now())
+
+  @@unique([userId, submissionId])
+  @@index([submissionId])
+}
+
+model SubmissionComment {
+  id           String             @id @default(cuid())
+  content      String             @db.Text
+  userId       String
+  submissionId String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submission   ExerciseSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([submissionId])
 }
 
 model CommunityPost {

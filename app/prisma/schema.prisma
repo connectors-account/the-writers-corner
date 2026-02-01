@@ -1,7 +1,6 @@
 generator client {
     provider = "prisma-client-js"
     binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
-    output = "/home/ubuntu/writers_corner/app/node_modules/.prisma/client"
 }
 
 datasource db {
@@ -50,6 +49,8 @@ model User {
   submissions   ExerciseSubmission[]
   communityPosts CommunityPost[]
   progress      UserProgress[]
+  postLikes     PostLike[]
+  postComments  PostComment[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -95,10 +96,34 @@ model ExerciseSubmission {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
   isPublic   Boolean  @default(false)
+  likes      PostLike[]
+  comments   PostComment[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@unique([userId, exerciseId])
+}
+
+model PostLike {
+  id           String   @id @default(cuid())
+  userId       String
+  postId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post         ExerciseSubmission @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, postId])
+}
+
+model PostComment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  userId    String
+  postId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      ExerciseSubmission @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CommunityPost {

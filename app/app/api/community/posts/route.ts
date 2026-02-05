@@ -18,7 +18,9 @@ export async function GET() {
       )
     }
 
-    // Fetch public exercise submissions
+    const userId = session.user.id
+
+    // Fetch public exercise submissions with like and comment counts
     const submissions = await prisma.exerciseSubmission.findMany({
       where: {
         isPublic: true
@@ -40,6 +42,17 @@ export async function GET() {
               }
             }
           }
+        },
+        likes: {
+          select: {
+            userId: true
+          }
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true
+          }
         }
       },
       orderBy: {
@@ -48,14 +61,17 @@ export async function GET() {
       take: 50
     })
 
-    // Convert submissions to community post format
+    // Convert submissions to community post format with like/comment data
     const posts = submissions.map(submission => ({
       id: submission.id,
       title: submission.exercise.title,
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      likeCount: submission._count.likes,
+      commentCount: submission._count.comments,
+      isLiked: submission.likes.some(like => like.userId === userId)
     }))
 
     return NextResponse.json({ posts })

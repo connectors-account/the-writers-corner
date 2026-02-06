@@ -18,7 +18,7 @@ export async function GET() {
       )
     }
 
-    // Fetch public exercise submissions
+    // Fetch public exercise submissions with comment counts
     const submissions = await prisma.exerciseSubmission.findMany({
       where: {
         isPublic: true
@@ -40,6 +40,11 @@ export async function GET() {
               }
             }
           }
+        },
+        _count: {
+          select: {
+            comments: true
+          }
         }
       },
       orderBy: {
@@ -49,13 +54,14 @@ export async function GET() {
     })
 
     // Convert submissions to community post format
-    const posts = submissions.map(submission => ({
+    const posts = submissions.map((submission: typeof submissions[number]) => ({
       id: submission.id,
       title: submission.exercise.title,
       content: submission.content,
       createdAt: submission.createdAt.toISOString(),
       user: submission.user,
-      exercise: submission.exercise
+      exercise: submission.exercise,
+      commentCount: submission._count.comments
     }))
 
     return NextResponse.json({ posts })

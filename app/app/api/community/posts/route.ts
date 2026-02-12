@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -17,6 +16,8 @@ export async function GET() {
         { status: 401 }
       )
     }
+
+    const userId = session.user.id
 
     // Fetch public exercise submissions
     const submissions = await prisma.exerciseSubmission.findMany({
@@ -48,15 +49,40 @@ export async function GET() {
       take: 50
     })
 
-    // Convert submissions to community post format
-    const posts = submissions.map(submission => ({
-      id: submission.id,
-      title: submission.exercise.title,
-      content: submission.content,
-      createdAt: submission.createdAt.toISOString(),
-      user: submission.user,
-      exercise: submission.exercise
-    }))
+    // Convert submissions to community post format with like/comment counts
+    const posts = await Promise.all(
+      submissions.map(async (submission) => {
+        // Get like count and user's like status for this submission
+        const [likeCount, userLike, commentCount] = await Promise.all([
+          prisma.postLike.count({
+            where: { postId: submission.id }
+          }),
+          prisma.postLike.findUnique({
+            where: {
+              postId_userId: {
+                postId: submission.id,
+                userId
+              }
+            }
+          }),
+          prisma.postComment.count({
+            where: { postId: submission.id }
+          })
+        ])
+
+        return {
+          id: submission.id,
+          title: submission.exercise.title,
+          content: submission.content,
+          createdAt: submission.createdAt.toISOString(),
+          user: submission.user,
+          exercise: submission.exercise,
+          likeCount,
+          liked: !!userLike,
+          commentCount
+        }
+      })
+    )
 
     return NextResponse.json({ posts })
   } catch (error) {

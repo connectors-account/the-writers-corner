@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import '@/lib/types'
+
+// POST /api/community/posts/[id]/like - Toggle like on a post
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const submissionId = params.id
+    const userId = session.user.id
+
+    // Check if the submission exists and is public
+    const submission = await prisma.exerciseSubmission.findFirst({
+      where: {
+        id: submissionId,
+        isPublic: true
+      }
+    })
+
+    if (!submission) {
+      return NextResponse.json(
+        { error: 'Post not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if user already liked this post
+    const existingLike = await prisma.postLike.findUnique({
+      where: {
+        userId_submissionId: {
+          userId,
+          submissionId
+        }
+      }
+    })
+
+    let liked: boolean
+
+    if (existingLike) {
+      // Unlike - remove the like
+      await prisma.postLike.delete({
+        where: {
+          id: existingLike.id
+        }
+      })
+      liked = false
+    } else {
+      // Like - create a new like
+      await prisma.postLike.create({
+        data: {
+          userId,
+          submissionId
+        }
+      })
+      liked = true
+    }
+
+    // Get updated like count
+    const likeCount = await prisma.postLike.count({
+      where: { submissionId }
+    })
+
+    return NextResponse.json({ liked, likeCount })
+  } catch (error) {
+    console.error('Error toggling like:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

@@ -6,10 +6,12 @@ import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, PenTool, BookOpen, Heart, MessageCircle, Filter, Search } from 'lucide-react'
+import { Users, PenTool, BookOpen, Filter, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
+import { LikeButton } from '@/components/community/like-button'
+import { CommentSection } from '@/components/community/comment-section'
 
 interface CommunityPost {
   id: string
@@ -28,6 +30,9 @@ interface CommunityPost {
       slug: string
     }
   }
+  likeCount: number
+  commentCount: number
+  userLiked: boolean
 }
 
 export function CommunityOverview() {
@@ -248,15 +253,12 @@ export function CommunityOverview() {
                     </p>
                     
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <Heart className="w-4 h-4 mr-1" />
-                          Like
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-forest hover:text-rust">
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Comment
-                        </Button>
+                      <div className="flex items-center gap-2">
+                        <LikeButton
+                          postId={post.id}
+                          initialLikeCount={post.likeCount}
+                          initialUserLiked={post.userLiked}
+                        />
                       </div>
                       
                       {post.exercise && (
@@ -267,6 +269,11 @@ export function CommunityOverview() {
                         </Link>
                       )}
                     </div>
+
+                    <CommentSection
+                      postId={post.id}
+                      initialCommentCount={post.commentCount}
+                    />
                   </CardContent>
                 </Card>
               </motion.div>
